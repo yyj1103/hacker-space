@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="color-scheme" content="dark"/>
+<link rel="icon" href="data:,"/>
+<title>黑客空間</title>
+<style>
+:root{
+  --bg:#020604; --panel:#010402; --green:#33ff66; --dim:#1d9e42; --faint:#0f5c26;
+  --soft:#8dffab; --amber:#ffb000; --red:#ff3b3b; --cyan:#39d5ff;
+  --text:#c9ffd6; --text-dim:#6fbf83; --line:#14532a;
+  --glow:0 0 6px rgba(51,255,102,.55),0 0 18px rgba(51,255,102,.18);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:"SF Mono","Cascadia Code","JetBrains Mono",Menlo,Consolas,"PingFang TC","Microsoft JhengHei",monospace;
+  font-size:14px;line-height:1.55;overflow:hidden;
+}
+.crt-scanlines{position:fixed;inset:0;z-index:40;pointer-events:none;background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.22) 3px,rgba(0,0,0,.22) 4px);mix-blend-mode:multiply}
+.crt-vignette{position:fixed;inset:0;z-index:41;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.55) 100%)}
+.crt-flicker{position:fixed;inset:0;z-index:39;pointer-events:none;background:rgba(51,255,102,.015);animation:flicker 4s steps(60) infinite}
+@keyframes flicker{0%,100%{opacity:.6}8%{opacity:.25}9%{opacity:.7}42%{opacity:.4}43%{opacity:.8}71%{opacity:.3}72%{opacity:.65}}
+@media (prefers-reduced-motion:reduce){.crt-flicker{animation:none}.blink{animation:none!important}.pulse{animation:none!important}}
+.pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.6s infinite;vertical-align:middle}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.blink{animation:blink 1.05s steps(1) infinite}
+@keyframes blink{0%,55%{opacity:1}56%,100%{opacity:0}}
+
+/* Fullscreen terminal window */
+.terminal-window{height:100dvh;display:flex;flex-direction:column;background:#010402;position:relative;z-index:1}
+.titlebar{
+  flex:0 0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:9px 12px;border-bottom:1px solid var(--line);background:#04140a;
+}
+.lights{display:flex;gap:6px}
+.dot{width:11px;height:11px;border-radius:50%}
+.dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
+.title{color:var(--soft);text-shadow:var(--glow);font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62vw}
+.title-meta{margin-left:auto;color:var(--text-dim);font-size:12px;display:flex;gap:14px;flex-wrap:wrap}
+.title-meta b{color:var(--green);font-weight:600}
+
+/* Compact stats strip — part of terminal, not dashboard cards */
+.statsbar{
+  flex:0 0 auto;border-bottom:1px solid var(--line);background:#020a04;
+  padding:7px 12px;font-size:12.5px;line-height:1.9;color:var(--text-dim);
+  display:flex;flex-wrap:wrap;gap:4px 18px;align-items:center;
+}
+.statsbar .item{white-space:nowrap}
+.statsbar .lab{color:var(--faint);letter-spacing:.06em}
+.statsbar .val{color:var(--green);text-shadow:var(--glow);font-weight:700}
+.statsbar .val.soft{color:var(--soft);text-shadow:none}
+.statsbar .val.amber{color:var(--amber);text-shadow:none}
+.statsbar .val.cyan{color:var(--cyan);text-shadow:none}
+.statsbar .val.red{color:var(--red);text-shadow:none}
+
+/* Terminal output */
+#term{
+  flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:14px 14px 10px;
+  white-space:pre-wrap;word-break:break-word;font-size:13.5px;line-height:1.65;
+  scrollbar-width:thin;scrollbar-color:var(--faint) transparent;
+  -webkit-overflow-scrolling:touch;
+}
+#term::-webkit-scrollbar{width:8px}
+#term::-webkit-scrollbar-thumb{background:var(--faint)}
+.t-green{color:var(--green);text-shadow:var(--glow)}
+.t-soft{color:var(--soft)} .t-dim{color:var(--text-dim)} .t-faint{color:var(--faint)}
+.t-amber{color:var(--amber)} .t-red{color:var(--red)} .t-cyan{color:var(--cyan)}
+.t-bold{font-weight:700} .t-white{color:#eaffef}
+
+/* Controls row — terminal keys */
+.keybar{
+  flex:0 0 auto;display:flex;flex-wrap:wrap;gap:7px;padding:8px 12px 0;background:#010402;
+}
+.keybar button{
+  background:transparent;border:1px solid var(--faint);color:var(--green);
+  font:inherit;font-size:12px;padding:5px 11px;cursor:pointer;letter-spacing:.03em;
+}
+.keybar button:hover{background:rgba(51,255,102,.1);border-color:var(--dim);text-shadow:var(--glow)}
+.keybar button.primary{border-color:var(--dim);background:rgba(51,255,102,.09);font-weight:700}
+.keybar button.danger{color:var(--red);border-color:#5c1a1a}
+.keybar .hint{margin-left:auto;color:var(--faint);font-size:11.5px;align-self:center}
+@media(max-width:640px){.keybar .hint{display:none} #term{font-size:12.8px;padding:12px 10px 8px} .title{max-width:100%} .title-meta{margin-left:0}}
+
+/* Input line pinned at bottom */
+.input-line{
+  flex:0 0 auto;display:flex;align-items:baseline;gap:8px;
+  padding:10px 14px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:#010402;
+}
+.prompt{color:var(--green);text-shadow:var(--glow);white-space:nowrap;font-weight:700;font-size:13.5px}
+.prompt .at{color:var(--cyan)}
+#cmd{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--soft);font:inherit;font-size:13.5px;caret-color:var(--green);text-shadow:var(--glow);padding:0}
+#cmd::placeholder{color:var(--faint);text-shadow:none}
+</style>
+</head>
+<body>
+<div class="crt-flicker"></div><div class="crt-scanlines"></div><div class="crt-vignette"></div>
+
+<div class="terminal-window" id="termWindow">
+  <!-- OS terminal title bar -->
+  <div class="titlebar">
+    <div class="lights"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+    <div class="title">miner@rig-01: ~/miner — lolMiner 1.92a</div>
+    <div class="title-meta">
+      <span><span class="pulse"></span> <b id="headStatus">BOOTING</b></span>
+      <span>SESSION <b id="sessionId">—</b></span>
+      <span><b id="clock">--:--:--</b></span>
+    </div>
+  </div>
+
+  <!-- One compact monospace stats line-set inside the terminal frame -->
+  <div class="statsbar" aria-label="挖礦狀態">
+    <span class="item"><span class="lab">STATUS </span><span class="val" id="sStatus">INIT</span></span>
+    <span class="item"><span class="lab">COIN </span><span class="val soft" id="sCoin">ETC / Etchash</span></span>
+    <span class="item"><span class="lab">POOL </span><span class="val soft" id="sPool">darkpool:4444</span></span>
+    <span class="item"><span class="lab">HASHRATE </span><span class="val" id="sHash">0.0 MH/s</span></span>
+    <span class="item"><span class="lab">GPU </span><span class="val soft" id="sGpu">—</span></span>
+    <span class="item"><span class="lab">TEMP </span><span class="val amber" id="sTemp">—</span></span>
+    <span class="item"><span class="lab">POWER </span><span class="val amber" id="sPower">0 W</span></span>
+    <span class="item"><span class="lab">SHARES </span><span class="val soft" id="sShares">0 / 0</span></span>
+    <span class="item"><span class="lab">BALANCE </span><span class="val cyan" id="sBalance">0.000000 ETC</span></span>
+    <span class="item"><span class="lab">UPTIME </span><span class="val soft" id="sRuntime">00:00:00</span></span>
+    <span class="item"><span class="lab">INT </span><span class="val soft" id="sIntensity">100%</span></span>
+  </div>
+
+  <div id="term" aria-live="polite"></div>
+
+  <div class="keybar">
+    <button type="button" class="primary" id="btnToggle">■ stop miner</button>
+    <button type="button" data-cmd="status">status</button>
+    <button type="button" data-cmd="gpus">gpus</button>
+    <button type="button" data-cmd="balance">balance</button>
+    <button type="button" data-cmd="help">help</button>
+    <button type="button" data-cmd="clear">clear</button>
+    <span class="hint">試打： coin kas · intensity 120 · pool nightmine</span>
+  </div>
+
+  <div class="input-line">
+    <span class="prompt">miner@rig-01<span class="at">:~</span>$</span>
+    <input id="cmd" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="help 睇指令 · mine stop 停挖 · coin kas 轉幣…" aria-label="終端指令輸入"/>
+    <span class="blink t-green" aria-hidden="true">▊</span>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var term=document.getElementById("term");
+var input=document.getElementById("cmd");
+var history=[],histIdx=-1,busy=false,bootDone=false;
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function pad(n){return (n<10?"0":"")+n}
+function nowStr(){var d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds())}
+function rand(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+function hex(n){var s="";for(var i=0;i<n;i++)s+="0123456789abcdef".charAt(rand(0,15));return s}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
+function line(html){var d=document.createElement("div");d.innerHTML=html;term.appendChild(d);while(term.children.length>420)term.removeChild(term.firstChild);term.scrollTop=term.scrollHeight}
+function text(s,cls){line('<span class="'+(cls||"")+'">'+esc(s)+"</span>")}
+function log(cls,msg){line('<span class="t-faint">['+nowStr()+']</span> <span class="'+cls+'">'+esc(msg)+"</span>")}
+function blank(){line("&nbsp;")}
+
+/* ---------- data ---------- */
+var COINS={
+  kas:{sym:"KAS",algo:"kHeavyHash",mult:5.6,rate:0.00042,price:0.17,drift:0.004,diff:"312.44 T"},
+  etc:{sym:"ETC",algo:"Etchash",mult:1.0,rate:0.000055,price:26.4,drift:0.02,diff:"18.72 T"},
+  rvn:{sym:"RVN",algo:"KawPow",mult:0.55,rate:0.0016,price:0.021,drift:0.0002,diff:"42.18 G"},
+  ergo:{sym:"ERG",algo:"Autolykos2",mult:1.35,rate:0.000028,price:1.42,drift:0.004,diff:"1.94 P"}
+};
+var POOLS={
+  darkpool:{name:"darkpool",host:"stratum+tcp://pool.darknet:4444",label:"darkpool:4444",ping:28},
+  nightmine:{name:"nightmine",host:"stratum+tcp://eu.nightmine:3333",label:"nightmine:3333",ping:41},
+  shadowhash:{name:"shadowhash",host:"stratum+tcp://asia.shadowhash:5555",label:"shadowhash:5555",ping:36}
+};
+var GPUS=[
+  {id:0,name:"NVIDIA RTX 4090",short:"RTX 4090",base:118,watts:320,temp:36,hash:0,power:18,fan:28,on:true,throttled:false,warned:false},
+  {id:1,name:"NVIDIA RTX 4080",short:"RTX 4080",base:96,watts:262,temp:35,hash:0,power:16,fan:26,on:true,throttled:false,warned:false},
+  {id:2,name:"NVIDIA RTX 3090",short:"RTX 3090",base:104,watts:305,temp:38,hash:0,power:20,fan:32,on:true,throttled:false,warned:false},
+  {id:3,name:"AMD RX 7900 XTX",short:"RX 7900 XTX",base:92,watts:285,temp:37,hash:0,power:17,fan:29,on:true,throttled:false,warned:false}
+];
+var mining=false,coinKey="etc",poolKey="darkpool",intensity=1.0;
+var balance=0,sharesOk=0,sharesBad=0,runtimeSec=0,totalHash=0,peakHash=0,jobId=hex(6);
+var shareTimer=rand(3,6),blockTimer=rand(55,100),tableTimer=20,wallet="0xD4rk"+hex(4)+"…"+hex(4);
+
+document.getElementById("sessionId").textContent="0x"+hex(6).toUpperCase();
+setInterval(function(){document.getElementById("clock").textContent=nowStr()},500);
+document.getElementById("clock").textContent=nowStr();
+
+function fmt(s){return pad(Math.floor(s/3600))+":"+pad(Math.floor((s%3600)/60))+":"+pad(s%60)}
+function coin(){return COINS[coinKey]}
+function pool(){return POOLS[poolKey]}
+
+function updateStats(){
+  var c=coin();
+  document.getElementById("headStatus").textContent=mining?"MINING":(bootDone?"IDLE":"BOOTING");
+  document.getElementById("sStatus").textContent=mining?"MINING ⛏":"IDLE";
+  document.getElementById("sStatus").style.color=mining?"var(--green)":"var(--amber)";
+  document.getElementById("sCoin").textContent=c.sym+" / "+c.algo;
+  document.getElementById("sPool").textContent=pool().label;
+  document.getElementById("sHash").textContent=totalHash.toFixed(1)+" MH/s";
+  var active=GPUS.filter(function(g){return g.on});
+  document.getElementById("sGpu").textContent=active.map(function(g){return "GPU"+g.id+" "+g.hash.toFixed(0)}).join(" · ")||"none";
+  var maxT=active.length?Math.max.apply(null,active.map(function(g){return g.temp})):0;
+  var avgT=active.length?active.reduce(function(a,g){return a+g.temp},0)/active.length:0;
+  document.getElementById("sTemp").textContent=active.length?("avg "+Math.round(avgT)+"°C / max "+Math.round(maxT)+"°C"):"—";
+  var pw=GPUS.reduce(function(a,g){return a+g.power},0);
+  document.getElementById("sPower").textContent=Math.round(pw)+" W";
+  document.getElementById("sShares").textContent=sharesOk+" ✓ / "+sharesBad+" ✗";
+  document.getElementById("sBalance").textContent=balance.toFixed(6)+" "+c.sym+"  ≈ $"+(balance*c.price).toFixed(2);
+  document.getElementById("sRuntime").textContent=fmt(runtimeSec);
+  document.getElementById("sIntensity").textContent=Math.round(intensity*100)+"%";
+  document.getElementById("btnToggle").textContent=mining?"■ stop miner":"▶ start miner";
+}
+
+function printGpuTable(){
+  var c=coin();
+  text("┌────┬────────────────┬───────────┬──────┬──────┬───────┬────────┐","t-dim");
+  text("│ ID │ DEVICE         │ HASHRATE  │ TEMP │ FAN  │ POWER │ STATUS │","t-soft t-bold");
+  text("├────┼────────────────┼───────────┼──────┼──────┼───────┼────────┤","t-dim");
+  GPUS.forEach(function(g){
+    var st=!g.on?"OFFLINE":g.throttled?"THROTTLE":mining?"MINING":"IDLE";
+    var row="│ "+g.id+"  │ "+g.short.padEnd(14," ")+" │ "+(g.hash.toFixed(1)+" MH/s").padEnd(9," ")+" │ "+(Math.round(g.temp)+"°C").padEnd(4," ")+" │ "+(g.fan+"%").padEnd(4," ")+" │ "+(Math.round(g.power)+"W").padEnd(5," ")+" │ "+st.padEnd(6," ")+" │";
+    text(row, g.throttled?"t-red":(!g.on?"t-dim":""));
+  });
+  text("└────┴────────────────┴───────────┴──────┴──────┴───────┴────────┘","t-dim");
+  text("TOTAL  "+totalHash.toFixed(1)+" MH/s  ·  peak "+peakHash.toFixed(1)+" MH/s  ·  algo "+c.algo+"  ·  intensity "+Math.round(intensity*100)+"%","t-green");
+}
+function printStatus(){
+  var c=coin();
+  text("── miner status ───────────────────────────────","t-soft t-bold");
+  text(" state     : "+(mining?"MINING":"IDLE"), mining?"t-green":"t-amber");
+  text(" coin/algo : "+c.sym+" / "+c.algo+"   difficulty "+c.diff);
+  text(" pool      : "+pool().host+"  ("+pool().ping+"ms)");
+  text(" wallet    : "+wallet);
+  text(" hashrate  : "+totalHash.toFixed(1)+" MH/s  (peak "+peakHash.toFixed(1)+")");
+  text(" shares    : accepted "+sharesOk+" · rejected "+sharesBad);
+  text(" balance   : "+balance.toFixed(6)+" "+c.sym+"  ≈ $"+(balance*c.price).toFixed(2)+"  (est. $"+(totalHash*c.rate*24*c.price).toFixed(2)+"/day gross)");
+  text(" uptime    : "+fmt(runtimeSec)+"   intensity "+Math.round(intensity*100)+"%");
+  text("───────────────────────────────────────────────","t-soft");
+}
+
+function setMining(on,quiet){
+  if(on===mining) { if(!quiet) text(mining?"miner 已經行緊。":"miner 本身冇行緊。","t-amber"); return; }
+  mining=on;
+  if(on){
+    log("t-green","▶ miner started — "+coin().sym+" ("+coin().algo+") @ "+pool().name+" · intensity "+Math.round(intensity*100)+"%");
+    log("t-dim","  new job 0x"+jobId+" from "+pool().name+" · difficulty "+coin().diff);
+  }else{
+    log("t-amber","■ miner stopped — session: "+sharesOk+" accepted / "+sharesBad+" rejected · balance "+balance.toFixed(6)+" "+coin().sym);
+    GPUS.forEach(function(g){g.throttled=false});
+  }
+  updateStats();
+}
+
+/* ---------- main 1s tick: the miner engine ---------- */
+setInterval(function(){
+  if(!bootDone) return;
+  var c=coin();
+  c.price=Math.max(c.price*0.8,c.price+(Math.random()-0.5)*2*c.drift);
+  var total=0;
+  GPUS.forEach(function(g){
+    var targetTemp,targetPow;
+    if(mining&&g.on){
+      g.throttled=g.temp>=86||(g.throttled&&g.temp>79);
+      var tf=g.throttled?0.76:1;
+      var target=g.base*c.mult*intensity*tf*(0.96+Math.random()*0.07);
+      g.hash+=(target-g.hash)*0.45;
+      targetTemp=Math.min(93,58+intensity*22+(g.id===2?4:0));
+      targetPow=g.watts*(0.55+intensity*0.5)*(0.96+Math.random()*0.08);
+      g.fan=Math.max(30,Math.min(100,Math.round(38+(g.temp-34)*1.05)));
+      if(g.temp>=84&&!g.warned){g.warned=true;log("t-amber","⚠ GPU"+g.id+" "+g.short+" 過熱 "+Math.round(g.temp)+"°C — 風扇拉滿"+(g.throttled?"，已降頻":""))}
+      if(g.temp<76) g.warned=false;
+    }else{
+      targetTemp=34; g.hash*=0.35; if(g.hash<0.05)g.hash=0; targetPow=g.on?17:5; g.fan=Math.max(0,g.fan-6);
+    }
+    g.power+=(targetPow-g.power)*0.4;
+    g.temp+=(targetTemp-g.temp)*0.12+(Math.random()-0.5)*0.7;
+    if(g.temp<30)g.temp=30;
+    total+=g.hash;
+  });
+  totalHash=total;
+  if(mining){
+    runtimeSec++; peakHash=Math.max(peakHash,total);
+    balance+=total*c.rate/3600;
+    shareTimer--;
+    if(shareTimer<=0){
+      shareTimer=rand(3,7);
+      if(Math.random()<0.06){sharesBad++;log("t-red","✗ share rejected #"+(sharesOk+sharesBad)+" — stale job (job 0x"+jobId+") · "+rand(18,42)+"ms")}
+      else{sharesOk++;
+        var g=GPUS.filter(function(x){return x.on})[rand(0,GPUS.filter(function(x){return x.on}).length-1)]||GPUS[0];
+        log("t-green","✓ share accepted #"+sharesOk+" — GPU"+g.id+" "+g.short+" · "+g.hash.toFixed(1)+" MH/s · diff "+(3.8+Math.random()*1.8).toFixed(2)+"G · "+pool().ping+rand(-6,14)+"ms");
+      }
+      if(Math.random()<0.28){jobId=hex(6);log("t-cyan","↻ new job 0x"+jobId+" — "+pool().name+" · height "+rand(18000000,19999999)+" · diff "+c.diff)}
+    }
+    blockTimer--;
+    if(blockTimer<=0){blockTimer=rand(60,120);log("t-cyan","⛏ block candidate found by GPU"+rand(0,3)+" — submitting to pool…");
+      setTimeout(function(){if(mining){var r=c.rate*900;balance+=r;log("t-green","★ block confirmed — reward +"+r.toFixed(4)+" "+c.sym+" credited to "+wallet)}},1700);}
+    tableTimer--;
+    if(tableTimer<=0){tableTimer=rand(22,34);blank();printGpuTable();blank()}
+  }
+  updateStats();
+},1000);
+
+/* ---------- boot + auto-start mining ---------- */
+async function boot(){
+  busy=true;
+  var lines=[
+    ["lolMiner 1.92a  —  lolMiner mining software (simulated build)","t-white t-bold"],
+    ["Copyright (c) 2026  rig-01  ·  purely front-end simulation, no real mining","t-dim"],
+    ["",""],
+    ["[init]  detecting GPUs …","t-soft"],
+    ["[init]  GPU0  NVIDIA RTX 4090     24 GB GDDR6X  — OK","t-green"],
+    ["[init]  GPU1  NVIDIA RTX 4080     16 GB GDDR6X  — OK","t-green"],
+    ["[init]  GPU2  NVIDIA RTX 3090     24 GB GDDR6X  — OK","t-green"],
+    ["[init]  GPU3  AMD RX 7900 XTX     24 GB GDDR6   — OK","t-green"],
+    ["[init]  4 device(s) found · drivers OK · watchdogs armed","t-dim"]
+  ];
+  for(var i=0;i<lines.length;i++){ if(lines[i][0]) text(lines[i][0],lines[i][1]); else blank(); await sleep(rand(110,260)); }
+  log("t-cyan","connecting to "+pool().host+" …");
+  await sleep(420);
+  log("t-green","pool connected — "+pool().name+" · latency "+pool().ping+"ms · stratum V2 authorised");
+  log("t-dim","wallet "+wallet+" · worker rig-01");
+  await sleep(300);
+  log("t-soft","loading DAG for "+coin().sym+" ("+coin().algo+") into VRAM … epoch 612 · 5.87 GB");
+  await sleep(520);
+  log("t-green","DAG generated on all 4 GPUs · verification passed");
+  await sleep(260);
+  blank();
+  bootDone=true;
+  setMining(true,true);
+  log("t-green","⛏ mining started automatically — ETC / Etchash · intensity 100%");
+  blank(); printGpuTable(); blank();
+  text("打 help 睇指令 — 例如 mine stop、coin kas、intensity 120、gpus、status。","t-dim");
+  blank();
+  busy=false; input.focus(); updateStats();
+}
+
+/* ---------- commands ---------- */
+function printHelp(){
+  text("可用指令：","t-soft t-bold");
+  [["help","呢個清單"],["mine start / stop","開挖 / 停挖（亦可直接打 start / stop）"],["status","礦工狀態總覽"],["gpus","逐張 GPU 算力 / 溫度 / 風扇 / 功耗表"],["balance","結餘 + 估算日收益"],["coin kas|etc|rvn|erg","切換幣種，礦工會自動重啟"],["pool darkpool|nightmine|shadowhash","切換礦池"],["intensity 50–130","設定強度（例：intensity 120；太高會過熱降頻）"],["gpu 0 off / gpu 0 on","停用 / 啟用某張 GPU"],["date","而家時間"],["clear","清走終端畫面"]].forEach(function(r){
+    line('<span class="t-green">  '+esc(r[0].padEnd(38," "))+'</span><span class="t-dim">'+esc(r[1])+"</span>");
+  });
+}
+async function runCommand(raw){
+  var cmd=raw.trim();
+  line('<span class="prompt">miner@rig-01<span style="color:var(--cyan)">:~</span>$</span> <span class="t-soft">'+esc(cmd)+"</span>");
+  if(!cmd)return;
+  history.unshift(cmd);histIdx=-1;
+  var p=cmd.split(/\s+/),name=p[0].toLowerCase(),a1=(p[1]||"").toLowerCase(),a2=(p[2]||"").toLowerCase();
+  busy=true;
+  switch(name){
+    case "help": printHelp(); break;
+    case "start": setMining(true); break;
+    case "stop": setMining(false); break;
+    case "mine": case "miner": case "mining":
+      if(a1==="start") setMining(true);
+      else if(a1==="stop") setMining(false);
+      else if(a1==="status"||a1==="") printStatus();
+      else text("用法：mine start · mine stop · mine status","t-amber");
+      break;
+    case "status": printStatus(); break;
+    case "gpus": case "gpu-list": printGpuTable(); break;
+    case "balance": case "bal":
+      var c=coin(); text("balance : "+balance.toFixed(6)+" "+c.sym+"  ≈ $"+(balance*c.price).toFixed(2),"t-cyan");
+      text("est/day : $"+(totalHash*c.rate*24*c.price).toFixed(2)+" gross · shares "+sharesOk+"✓ / "+sharesBad+"✗ · uptime "+fmt(runtimeSec),"t-dim"); break;
+    case "coin":
+      if(COINS[a1]){ var was=mining; if(was)setMining(false,true); coinKey=a1; jobId=hex(6); peakHash=0;
+        log("t-cyan","switching coin → "+coin().sym+" ("+coin().algo+") · reloading DAG …");
+        await sleep(600); log("t-green","DAG loaded · difficulty "+coin().diff);
+        if(was) setMining(true,true); updateStats();
+      } else text("用法：coin kas | etc | rvn | erg","t-amber");
+      break;
+    case "pool":
+      if(POOLS[a1]){ poolKey=a1; log("t-cyan","reconnecting → "+pool().host+" …"); await sleep(450); pool().ping=rand(19,58); log("t-green","pool connected — "+pool().name+" · "+pool().ping+"ms"); updateStats(); }
+      else text("用法：pool darkpool | nightmine | shadowhash","t-amber");
+      break;
+    case "intensity": case "int":
+      var v=parseInt(a1,10);
+      if(v>=50&&v<=130){ intensity=v/100; text("intensity → "+v+"%"+(v>=120?" — 小心過熱降頻":""), v>=120?"t-amber":"t-green"); updateStats(); }
+      else text("用法：intensity 50–130（例：intensity 110）","t-amber");
+      break;
+    case "gpu":
+      var gi=parseInt(a1,10);
+      if(GPUS[gi]&&(a2==="off"||a2==="on")){ GPUS[gi].on=(a2==="on"); log(GPUS[gi].on?"t-green":"t-amber","GPU"+gi+" "+GPUS[gi].short+(GPUS[gi].on?" 已啟用，重新分配工作":" 已停用")); updateStats(); }
+      else text("用法：gpu 0 off · gpu 2 on","t-amber");
+      break;
+    case "date": text(new Date().toString(),"t-soft"); break;
+    case "whoami": text("miner — rig-01 嘅操作員，深夜仲喺度睇算力。","t-soft"); break;
+    case "clear": term.innerHTML=""; break;
+    case "exit": case "logout": text("miner 仲行緊，唔好走住。（想停就打 mine stop）","t-amber"); break;
+    default: line('<span class="t-red">bash: '+esc(name)+': command not found</span> <span class="t-dim">— 打 help 睇可用指令</span>');
+  }
+  busy=false; term.scrollTop=term.scrollHeight;
+}
+input.addEventListener("keydown",function(e){
+  if(e.key==="Enter"){ if(busy)return; var v=input.value; input.value=""; runCommand(v); }
+  else if(e.key==="ArrowUp"){ e.preventDefault(); if(histIdx<history.length-1){histIdx++;input.value=history[histIdx]||""} }
+  else if(e.key==="ArrowDown"){ e.preventDefault(); if(histIdx>0){histIdx--;input.value=history[histIdx]||""} else {histIdx=-1;input.value=""} }
+});
+document.querySelectorAll("[data-cmd]").forEach(function(b){b.addEventListener("click",function(){if(!busy)runCommand(b.getAttribute("data-cmd"));input.focus()})});
+document.getElementById("btnToggle").addEventListener("click",function(){if(!busy)runCommand(mining?"mine stop":"mine start");input.focus()});
+document.getElementById("termWindow").addEventListener("click",function(e){if(e.target.tagName!=="BUTTON")input.focus()});
+updateStats();
+boot();
+})();
+</script>
+</body>
+</html>
